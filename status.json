@@ -1,9 +1,10 @@
 {
-  "updatedAt": "2026-07-17T00:00:00Z",
+  "updatedAt": "2026-07-30T05:15:00Z",
   "phase": "active",
-  "headline": "Visual-variety build landed and the lead→gated-preview pipeline is documented + runnable. This session shipped the skin mechanism (design key + override-only presets), additive brand dials (fontPairing/shadow/spacingDensity/radius), section-variant rail hardening, the impeccable design-smell gate (#176) + skin design-critic rubric (#177), the claims/compliance acceptance guardrail (#149), a one-command gated Vercel preview (deploy-preview, #154), and LANDED the two bespoke preview apps (pnw-arborist + septic-response, #150) with fabricated review counts softened to the verified aggregate. Monroe's fabricated reviews/claims (#146) neutralized. New docs/PIPELINE-RUNBOOK.md captures the end-to-end lead->preview path so a fresh session runs it from a one-line prompt. 9 apps build clean; engine still frozen here (lives in ops). Pre-revenue — no paying client yet.",
+  "headline": "Duran's Tree Service (Yakima WA, 5.0★/132 reviews, no website) built as a config-only gated preview (apps/duran-tree-service, PR #187) — real name/phone/hours/service-area, reviews:[] (aggregate stated in copy, no fabricated text), stub email/siteUrl/form-key, no unverifiable licensed/insured/bonded claims. check + build + 10/10 tests green, gated (SITE_LIVE unset). deploy-preview attempted twice: first blocked on the `vercel` CLI missing from PATH; after installing it, the actual `?key=` link is still blocked by a real tooling bug (#188, follow-up to #154) — Vercel classifies a fresh git-unlinked project's first deploy as target=production even with `--target=preview`, which correctly arms the placeholder acceptance gate and fails the build. Previous session shipped the skin mechanism, brand dials, section-variant rail, impeccable design-smell gate (#176), skin design-critic rubric (#177), claims/compliance guardrail (#149), deploy-preview itself (#154), and pnw-arborist + septic-response bespoke previews (#150). Monroe's fabricated reviews/claims (#146) neutralized. 8 apps build clean; engine still frozen here (lives in ops). Pre-revenue — no paying client yet.",
   "next": [
-    "REVENUE PATH (human): deploy a real gated preview live + grant workflows scope / seed vars (#8/#112) — proves the pipeline end-to-end",
+    "Fix #188 (deploy-preview first-deploy-lands-on-production) — the actual blocker on producing any gated ?key= link for a brand-new client project",
+    "REVENUE PATH (human): once #188 is fixed, deploy Duran's Tree Service (PR #187) preview live and send it in cold outreach — proves the pipeline end-to-end",
     "REVENUE PATH (human): drop the Pexels key so auto-imagery flows (#14) — run fetch-photos locally today; note the sandbox egress block",
     "Put pnw-arborist or septic-response in front of the real lead it was generated for — the actual sale",
     "Decompose the bespoke-template extraction epic (#153) now the apps exist on main; build only behind a real bespoke-tier client",
@@ -11,6 +12,7 @@
     "hirobius/ops follow-up: re-sync vendored lib/schema with fontPairing/shadow/spacingDensity/design so the ops agent can emit them"
   ],
   "blocked": [
+    "Gated preview links (any new client, incl. Duran's Tree Service PR #187) blocked on #188 — deploy-preview's first deploy lands on Vercel target=production, tripping the placeholder acceptance gate",
     "Autonomous LLM site generation blocked on ANTHROPIC_API_KEY (in ops) — the deterministic + session-as-agent path runs without it",
     "impeccable critique/polish unreachable upstream (403); detect gate shipped instead (#175 closed)",
     "Engine delete (#10) waits on ops's first live generate",
