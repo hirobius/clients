@@ -154,6 +154,34 @@ export function setPreviewTokenEnv(
   return res.status === 0;
 }
 
+/**
+ * Idempotently sets `PREVIEW_BUILD=true` so `armAcceptanceGate` treats this as a
+ * gated preview and does NOT arm the go-live acceptance checks even when Vercel
+ * labels the deploy `production` — a fresh project's FIRST deploy is
+ * misclassified `VERCEL_ENV=production` even for a `?key=` gated preview
+ * (issue #188), which otherwise blocks the intended placeholder intake data.
+ * Set for BOTH `preview` and `production` scopes so whichever environment Vercel
+ * runs the build in, the signal is present. Safe: this is a dedicated preview
+ * project; real go-live uses `SITE_LIVE=true`, which always arms regardless.
+ */
+export function setPreviewBuildEnv(
+  dir: string,
+  vercelToken: string,
+  spawnImpl: SpawnFn = defaultSpawn,
+): boolean {
+  let ok = true;
+  for (const scope of ["preview", "production"] as const) {
+    spawnImpl("vercel", ["env", "rm", "PREVIEW_BUILD", scope, "--yes", "--cwd", dir, "--token", vercelToken], {});
+    const res = spawnImpl(
+      "vercel",
+      ["env", "add", "PREVIEW_BUILD", scope, "--cwd", dir, "--token", vercelToken],
+      { input: "true\n" },
+    );
+    ok = ok && res.status === 0;
+  }
+  return ok;
+}
+
 export interface BasicAuthCreds {
   user: string;
   pass: string;
@@ -389,6 +417,11 @@ if (isMain()) {
   console.log(`→ Setting PREVIEW_USER/PREVIEW_PASS (preview env, so the no-key path fails closed with 401)...`);
   if (!setBasicAuthEnv(outDir, basicAuth, vercelToken)) {
     die("`vercel env add PREVIEW_USER/PREVIEW_PASS preview` failed — see output above.");
+  }
+
+  console.log(`→ Setting PREVIEW_BUILD=true (keeps the gated preview from arming the go-live gate — issue #188)...`);
+  if (!setPreviewBuildEnv(outDir, vercelToken)) {
+    die("`vercel env add PREVIEW_BUILD` failed — see output above.");
   }
 
   let link: ProjectLink;

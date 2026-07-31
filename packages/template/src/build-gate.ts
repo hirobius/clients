@@ -27,6 +27,14 @@ function hasOptimizedAsset(imagePath: string, appDir: string): boolean {
  * build without anyone remembering to flip a flag in a test file (issue #78).
  * Preview builds (the default, everywhere in CI/local dev) stay unarmed.
  *
+ * Exception — `PREVIEW_BUILD=true` (issue #188): a gated `deploy-preview` build
+ * is NOT go-live even when Vercel labels it production. Vercel misclassifies a
+ * fresh project's FIRST deploy as `VERCEL_ENV=production` even for a `?key=`
+ * gated preview, which used to arm the gate and block the intended placeholder
+ * intake data. `deploy-preview` sets `PREVIEW_BUILD=true`, which suppresses the
+ * Vercel-production signal so the gated preview builds. `SITE_LIVE=true` still
+ * always arms, so real go-live (which never sets `PREVIEW_BUILD`) is unaffected.
+ *
  * Also checks `hero.image` resolves to an optimized `src/assets/photos/` file
  * rather than an unoptimized `public/` one (issue #81) — a preview build only
  * warns (photos often land after intake), a real build fails it outright,
@@ -40,7 +48,10 @@ function hasOptimizedAsset(imagePath: string, appDir: string): boolean {
  * Astro loads `astro.config.ts` — override only in tests.
  */
 export function armAcceptanceGate(client: ClientConfig, appDir: string = process.cwd()): void {
-  const realData = process.env.SITE_LIVE === "true" || process.env.VERCEL_ENV === "production";
+  const gatedPreview = process.env.PREVIEW_BUILD === "true";
+  const realData =
+    process.env.SITE_LIVE === "true" ||
+    (process.env.VERCEL_ENV === "production" && !gatedPreview);
   const issues = checkClientAcceptance(client, { realData });
 
   if (!realData) {
