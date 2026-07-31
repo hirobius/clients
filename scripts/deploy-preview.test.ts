@@ -102,6 +102,13 @@ describe("extractDeployUrl / buildPreviewUrl — URL assembly", () => {
     expect(() => extractDeployUrl("some unrelated output")).toThrow(/deployment URL/);
   });
 
+  it("does not capture a trailing quote/comma when the URL sits inside JSON-ish output", () => {
+    // Regression: `\\S*` used to swallow the trailing `\",` and yield an
+    // unresolvable hostname (issue #188 deploy run).
+    const stdout = 'some log\n  "url": "https://duran-abc123.vercel.app",\nmore log';
+    expect(extractDeployUrl(stdout)).toBe("https://duran-abc123.vercel.app");
+  });
+
   it("appends ?key=<token> to the deployment URL", () => {
     expect(buildPreviewUrl("https://mikes-junk-abc123.vercel.app", "deadbeef")).toBe(
       "https://mikes-junk-abc123.vercel.app/?key=deadbeef",

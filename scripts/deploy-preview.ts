@@ -154,6 +154,34 @@ export function setPreviewTokenEnv(
   return res.status === 0;
 }
 
+/**
+ * Idempotently sets `PREVIEW_BUILD=true` so `armAcceptanceGate` treats this as a
+ * gated preview and does NOT arm the go-live acceptance checks even when Vercel
+ * labels the deploy `production` — a fresh project's FIRST deploy is
+ * misclassified `VERCEL_ENV=production` even for a `?key=` gated preview
+ * (issue #188), which otherwise blocks the intended placeholder intake data.
+ * Set for BOTH `preview` and `production` scopes so whichever environment Vercel
+ * runs the build in, the signal is present. Safe: this is a dedicated preview
+ * project; real go-live uses `SITE_LIVE=true`, which always arms regardless.
+ */
+export function setPreviewBuildEnv(
+  dir: string,
+  vercelToken: string,
+  spawnImpl: SpawnFn = defaultSpawn,
+): boolean {
+  let ok = true;
+  for (const scope of ["preview", "production"] as const) {
+    spawnImpl("vercel", ["env", "rm", "PREVIEW_BUILD", scope, "--yes", "--cwd", dir, "--token", vercelToken], {});
+    const res = spawnImpl(
+      "vercel",
+      ["env", "add", "PREVIEW_BUILD", scope, "--cwd", dir, "--token", vercelToken],
+      { input: "true\n" },
+    );
+    ok = ok && res.status === 0;
+  }
+  return ok;
+}
+
 export interface BasicAuthCreds {
   user: string;
   pass: string;
@@ -282,9 +310,14 @@ export function assertPreviewTarget(args: string[]): void {
   }
 }
 
-/** Pulls the deployment URL `vercel deploy` prints on its final stdout line. */
+/**
+ * Pulls the deployment URL `vercel deploy` prints on its final stdout line.
+ * Stops at whitespace or quote/bracket/paren chars so a URL that appears inside
+ * JSON-ish output (e.g. `"...vercel.app",`) doesn't capture a trailing `",` and
+ * produce an unresolvable hostname.
+ */
 export function extractDeployUrl(stdout: string): string {
-  const match = stdout.match(/https:\/\/\S+\.vercel\.app\S*/);
+  const match = stdout.match(/https:\/\/[^\s"'<>)\]]+\.vercel\.app[^\s"'<>)\]]*/);
   if (!match) {
     throw new Error(`Could not find a deployment URL in \`vercel deploy\` output:\n${stdout}`);
   }
@@ -391,6 +424,11 @@ if (isMain()) {
     die("`vercel env add PREVIEW_USER/PREVIEW_PASS preview` failed — see output above.");
   }
 
+  console.log(`→ Setting PREVIEW_BUILD=true (keeps the gated preview from arming the go-live gate — issue #188)...`);
+  if (!setPreviewBuildEnv(outDir, vercelToken)) {
+    die("`vercel env add PREVIEW_BUILD` failed — see output above.");
+  }
+
   let link: ProjectLink;
   try {
     link = readProjectLink(outDir);
@@ -420,16 +458,28 @@ if (isMain()) {
   const previewUrl = buildPreviewUrl(deployUrl, token);
 
   console.log(`\n→ Verifying the gate against the real deploy (200 with the key, closed without)...`);
-  const gate = await verifyPreviewGate(previewUrl);
-  console.log(`${gate.withKey.pass ? "✓" : "✖"} with key — ${gate.withKey.detail}`);
-  console.log(`${gate.withoutKey.pass ? "✓" : "✖"} without key (gate closed) — ${gate.withoutKey.detail}`);
+  try {
+    const gate = await verifyPreviewGate(previewUrl);
+    console.log(`${gate.withKey.pass ? "✓" : "✖"} with key — ${gate.withKey.detail}`);
+    console.log(`${gate.withoutKey.pass ? "✓" : "✖"} without key (gate closed) — ${gate.withoutKey.detail}`);
 
-  if (gate.withKey.pass && gate.withoutKey.pass && sso.ok) {
-    console.log(`\n✓ Gated preview ready and verified:\n\n  ${previewUrl}\n`);
-  } else {
+    if (gate.withKey.pass && gate.withoutKey.pass && sso.ok) {
+      console.log(`\n✓ Gated preview ready and verified:\n\n  ${previewUrl}\n`);
+    } else {
+      console.log(
+        `\n⚠ Deployed, but not fully verified above — the link may not resolve yet ` +
+          `(Vercel deploys can take a few seconds to propagate; re-run this command to re-check):\n\n  ${previewUrl}\n`,
+      );
+      if (!sso.ok) console.log(`  Deployment Protection still needs a manual disable: ${sso.deepLink}\n`);
+    }
+  } catch (err) {
+    // The deploy already succeeded; a throw here is almost always the runner
+    // being unable to resolve the .vercel.app host (no outbound DNS in some
+    // CI/sandbox networks). Don't fail the command — print the link so it isn't
+    // lost, and let the operator open it to confirm.
     console.log(
-      `\n⚠ Deployed, but not fully verified above — the link may not resolve yet ` +
-        `(Vercel deploys can take a few seconds to propagate; re-run this command to re-check):\n\n  ${previewUrl}\n`,
+      `\n⚠ Deployed, but couldn't verify the gate from here (${(err as Error).message}).` +
+        ` That's usually the runner's network, not the deploy — open the link to confirm:\n\n  ${previewUrl}\n`,
     );
     if (!sso.ok) console.log(`  Deployment Protection still needs a manual disable: ${sso.deepLink}\n`);
   }

@@ -68,7 +68,7 @@ const REAL_INPUT: ClientConfigInput = {
 
 const realClient = defineClient(REAL_INPUT);
 
-const ENV_KEYS = ["SITE_LIVE", "VERCEL_ENV"] as const;
+const ENV_KEYS = ["SITE_LIVE", "VERCEL_ENV", "PREVIEW_BUILD"] as const;
 
 afterEach(() => {
   for (const key of ENV_KEYS) delete process.env[key];
@@ -92,6 +92,18 @@ describe("armAcceptanceGate", () => {
   it("does not arm for VERCEL_ENV=preview", () => {
     process.env.VERCEL_ENV = "preview";
     expect(() => armAcceptanceGate(client)).not.toThrow();
+  });
+
+  it("does not arm for VERCEL_ENV=production when PREVIEW_BUILD=true (gated deploy-preview, issue #188)", () => {
+    process.env.VERCEL_ENV = "production";
+    process.env.PREVIEW_BUILD = "true";
+    expect(() => armAcceptanceGate(client)).not.toThrow();
+  });
+
+  it("still arms on SITE_LIVE=true even when PREVIEW_BUILD=true (go-live always wins)", () => {
+    process.env.SITE_LIVE = "true";
+    process.env.PREVIEW_BUILD = "true";
+    expect(() => armAcceptanceGate(client)).toThrow(/checkClientAcceptance found/);
   });
 });
 
