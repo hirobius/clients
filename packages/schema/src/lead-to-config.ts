@@ -1,6 +1,7 @@
 import { defineClient, type ClientConfig, type ClientConfigDraft, type SectionId } from "./index.js";
 import { PALETTE_PRESET_IDS, type PalettePresetId } from "./presets.js";
 import type { SkinId } from "./skins.js";
+import { pickDesign } from "./design-genome.js";
 
 /**
  * Deterministic, no-LLM lead → config mapper (issue #121).
@@ -43,6 +44,17 @@ export interface LeadRow {
    * onto this field, same as it already does for `service_area` → `serviceArea`.
    */
   artDirection?: SkinId;
+  /**
+   * Google Places id (issue #148) — the stable identity the seeded design
+   * selector (`design-genome.ts`'s `pickDesign`) hashes on, so the same
+   * business always renders the same look even across a re-pull/re-generate.
+   * Optional: `pickDesign` falls back to `slug`, then `name`-`city`, when a
+   * lead predates `place_id` being threaded through ingestion (see #148's
+   * "hard dependency to broadcast" — ops's `leads` table + reader must
+   * persist and pass it through as this camelCase field, same convention as
+   * `artDirection`/`serviceArea` above).
+   */
+  placeId?: string | null;
 }
 
 export interface LeadToConfigResult {
@@ -145,7 +157,25 @@ export function leadToConfig(lead: LeadRow): LeadToConfigResult {
   const sectionOrder: SectionId[] = ["services", "serviceAreaMap", "contact"];
 
   // Style only (golden rule #5) — never derived from or applied to a business fact.
-  const design: SkinId = lead.artDirection ?? "classic";
+  //
+  // An explicit lead.artDirection (a human/agent decision, e.g. a demo asking
+  // for a specific look) always wins outright — same single-skin, no-extra-
+  // dials behavior as before #148. Otherwise every axis (skin, font, radius,
+  // hero variant, brand dials) comes from the seeded design genome
+  // (`design-genome.ts`, issue #148), keyed on a stable lead id — so two
+  // same-trade leads no longer render identical sites, and re-generating the
+  // same lead always reproduces the same look.
+  let design: SkinId;
+  let pickedBrand: ReturnType<typeof pickDesign>["brand"] | undefined;
+  let pickedSections: ReturnType<typeof pickDesign>["layout"]["sections"] | undefined;
+  if (lead.artDirection !== undefined) {
+    design = lead.artDirection;
+  } else {
+    const picked = pickDesign(lead);
+    design = picked.design;
+    pickedBrand = picked.brand;
+    pickedSections = picked.layout.sections;
+  }
 
   const draft: ClientConfigDraft = {
     slug: lead.slug,
@@ -157,8 +187,8 @@ export function leadToConfig(lead: LeadRow): LeadToConfigResult {
       hours: hours ?? [{ days: "Mon–Sun", hours: "Call for hours" }],
       serviceAreas,
     },
-    brand: { palettePreset: trade },
-    layout: { sectionOrder },
+    brand: pickedBrand ? { palettePreset: trade, ...pickedBrand } : { palettePreset: trade },
+    layout: pickedSections ? { sectionOrder, sections: pickedSections } : { sectionOrder },
     contentPack: trade,
     copy: {
       heroHeadline: `Trusted ${tradeLabel[0]?.toUpperCase()}${tradeLabel.slice(1)} in ${lead.city}`,

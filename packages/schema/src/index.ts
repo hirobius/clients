@@ -543,3 +543,4 @@ export * from "./content-packs.js";
 export * from "./lead-to-config.js";
 export * from "./section-variants.js";
 export * from "./skins.js";
+export * from "./design-genome.js";
