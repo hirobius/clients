@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { leadToConfig, mapCategoryToTrade, type LeadRow } from "./lead-to-config.js";
+import { pickDesign } from "./design-genome.js";
 import { PALETTE_PRESET_IDS } from "./presets.js";
 import { SKINS, SKIN_IDS } from "./skins.js";
 
@@ -80,11 +81,34 @@ describe("leadToConfig", () => {
     expect(todos.some((t) => t.includes('category "Widget assembly" didn\'t match a known trade'))).toBe(true);
   });
 
-  describe("artDirection", () => {
-    it("defaults to the classic skin when artDirection is absent", () => {
-      const omitted = leadToConfig(ROLLING_SUDS).config;
+  describe("artDirection / seeded design genome (issue #148)", () => {
+    it("uses the seeded design genome (not a hardcoded 'classic') when artDirection is absent", () => {
+      const picked = pickDesign(ROLLING_SUDS);
+      const { config } = leadToConfig(ROLLING_SUDS);
+
+      expect(config).not.toHaveProperty("design"); // design key never reaches the validated output
+      expect(config.layout.sections.hero.variant).toBe(picked.layout.sections.hero.variant);
+      expect(config.brand.fontPairing).toBe(picked.brand.fontPairing);
+      expect(config.brand.font).toBe(picked.brand.font);
+      expect(config.brand.radius).toBe(picked.brand.radius);
+      expect(config.brand.shadow).toBe(picked.brand.shadow);
+      expect(config.brand.motion).toBe(picked.brand.motion);
+      expect(config.brand.spacingDensity).toBe(picked.brand.spacingDensity);
+    });
+
+    it("is deterministic: the same lead id always resolves to the same design", () => {
+      const first = leadToConfig(ROLLING_SUDS).config;
+      const second = leadToConfig({ ...ROLLING_SUDS }).config;
+      expect(second.layout.sections.hero.variant).toBe(first.layout.sections.hero.variant);
+      expect(second.brand).toEqual(first.brand);
+    });
+
+    it("an explicit artDirection wins outright over the seeded genome pick", () => {
       const explicit = leadToConfig({ ...ROLLING_SUDS, artDirection: "classic" }).config;
-      expect(omitted).toEqual(explicit);
+      expect(explicit.brand.radius).toBe(SKINS.classic.brand.radius);
+      expect(explicit.brand.shadow).toBe(SKINS.classic.brand.shadow);
+      expect(explicit.brand.motion).toBe(SKINS.classic.brand.motion);
+      expect(explicit.layout.sections.hero.variant).toBe(SKINS.classic.sections.hero);
     });
 
     it("produces a valid config matching the skin's pinned brand + section tokens, for every shipped artDirection", () => {
